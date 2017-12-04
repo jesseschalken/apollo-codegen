@@ -1,35 +1,37 @@
-import { LegacyCompilerContext, LegacyInlineFragment, LegacyFragment, LegacyField, LegacyOperation } from '../compiler/legacyIR';
 import {
-  GraphQLError,
+  LegacyCompilerContext,
+  LegacyField,
+  LegacyFragment,
+  LegacyInlineFragment,
+  LegacyOperation,
+} from "../compiler/legacyIR"
+import {
   getNamedType,
-  isCompositeType,
-  isAbstractType,
   GraphQLEnumType,
+  GraphQLError,
+  GraphQLInputObjectType,
+  GraphQLInterfaceType,
   GraphQLList,
   GraphQLNonNull,
-  GraphQLInputObjectType,
+  GraphQLObjectType,
   GraphQLType,
   GraphQLUnionType,
-  GraphQLInterfaceType,
-  GraphQLObjectType
-} from 'graphql'
+  isAbstractType,
+  isCompositeType,
+} from "graphql"
 
-import {
-  wrap
-} from '../utilities/printing';
+import {wrap} from "../utilities/printing"
 
-import CodeGenerator from '../utilities/CodeGenerator';
+import CodeGenerator from "../utilities/CodeGenerator"
 
 import {
   interfaceDeclaration,
+  Property,
   propertyDeclaration,
   propertySetsDeclaration,
-  Property
-} from './language';
+} from "./language"
 
-import {
-  typeNameFromGraphQLType,
-} from './types';
+import {typeNameFromGraphQLType,} from "./types"
 
 export function generateSource(context: LegacyCompilerContext) {
   const generator = new CodeGenerator<LegacyCompilerContext>(context);
@@ -48,9 +50,38 @@ export function generateSource(context: LegacyCompilerContext) {
     interfaceDeclarationForFragment(generator, operation)
   );
 
+  generator.printNewline()
+  generator.printOnNewline("export class Query<Targs, Tresult> {")
+  generator.printOnNewline("  constructor(public document: string) {}")
+  generator.printOnNewline("  run(args: Targs, run: (document: string, args: any) => Promise<any>): Promise<Tresult> {")
+  generator.printOnNewline("    return run(this.document, args);")
+  generator.printOnNewline("  }")
+  generator.printOnNewline("}")
+  generator.printNewline()
+
+  Object.values(context.operations).forEach(operation => {
+    variableForOperation(generator, operation)
+  })
+
   generator.printNewline();
 
   return generator.output;
+}
+
+function variableForOperation(generator: CodeGenerator,
+  {
+    operationName,
+    operationType,
+    sourceWithFragments,
+    variables
+  }: LegacyOperation
+) {
+  const interfaceName = interfaceNameFromOperation({operationName, operationType})
+  const interfaceNameVariables = variables && variables.length > 1 ? interfaceName + 'Variables' : '{}'
+
+  generator.printOnNewline(
+    `export const ${operationName} = new Query<${interfaceNameVariables}, ${interfaceName}>(${JSON.stringify(sourceWithFragments)})`
+  )
 }
 
 export function typeDeclarationForGraphQLType(generator: CodeGenerator, type: GraphQLType) {
