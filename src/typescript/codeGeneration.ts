@@ -51,9 +51,12 @@ export function generateSource(context: LegacyCompilerContext) {
   );
 
   generator.printNewline()
+  generator.printOnNewline("import {default as gql_} from \"graphql-tag\"")
+  generator.printOnNewline("import {DocumentNode} from \"graphql\"")
+  generator.printNewline()
   generator.printOnNewline("export class Query<Targs, Tresult> {")
-  generator.printOnNewline("  constructor(public document: string) {}")
-  generator.printOnNewline("  run(args: Targs, run: (document: string, args: any) => Promise<any>): Promise<Tresult> {")
+  generator.printOnNewline("  constructor(public document: DocumentNode) {}")
+  generator.printOnNewline("  run(args: Targs, run: (document: DocumentNode, args: any) => Promise<any>): Promise<Tresult> {")
   generator.printOnNewline("    return run(this.document, args);")
   generator.printOnNewline("  }")
   generator.printOnNewline("}")
@@ -76,11 +79,18 @@ function variableForOperation(generator: CodeGenerator,
     variables
   }: LegacyOperation
 ) {
-  const interfaceName = interfaceNameFromOperation({operationName, operationType})
-  const interfaceNameVariables = variables && variables.length > 1 ? interfaceName + 'Variables' : '{}'
+  const outType = interfaceNameFromOperation({operationName, operationType})
+  const inType = variables && variables.length > 0 ? outType + 'Variables' : '{}'
 
+  generator.printNewlineIfNeeded()
   generator.printOnNewline(
-    `export const ${operationName} = new Query<${interfaceNameVariables}, ${interfaceName}>(${JSON.stringify(sourceWithFragments)})`
+    // We need to use the gql template tag because of https://github.com/apollographql/graphql-tag/issues/40
+    // I have it aliased to "gql_" instead of "gql" because causes the IJ GraphQL plugin to kick
+    // in and start throwing errors about duplicate fragment.
+    // TODO make sure the escaping is correct...
+    `export const ${operationName} = new Query<${inType}, ${outType}>(gql_\`\n` +
+    `${sourceWithFragments}\n` +
+    `\`);`,
   )
 }
 
