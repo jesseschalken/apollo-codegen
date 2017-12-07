@@ -54,12 +54,15 @@ export function generateSource(context: LegacyCompilerContext) {
   generator.printOnNewline("import {default as gql_} from \"graphql-tag\"")
   generator.printOnNewline("import {DocumentNode} from \"graphql\"")
   generator.printNewline()
-  generator.printOnNewline("export class Query<Targs, Tresult> {")
+  generator.printOnNewline("export class Operation<Targs, Tresult> {")
   generator.printOnNewline("  constructor(public document: DocumentNode) {}")
   generator.printOnNewline("  run(args: Targs, run: (document: DocumentNode, args: any) => Promise<any>): Promise<Tresult> {")
   generator.printOnNewline("    return run(this.document, args);")
   generator.printOnNewline("  }")
   generator.printOnNewline("}")
+  generator.printOnNewline("export class Query<In, Out> extends Operation<In, Out> {}")
+  generator.printOnNewline("export class Mutation<In, Out> extends Operation<In, Out> {}")
+  generator.printOnNewline("export class Subscription<In, Out> extends Operation<In, Out> {}")
   generator.printNewline()
 
   Object.values(context.operations).forEach(operation => {
@@ -81,6 +84,7 @@ function variableForOperation(generator: CodeGenerator,
 ) {
   const outType = interfaceNameFromOperation({operationName, operationType})
   const inType = variables && variables.length > 0 ? outType + 'Variables' : '{}'
+  const class_ = getOperationBaseClass(operationType)
 
   generator.printNewlineIfNeeded()
   generator.printOnNewline(
@@ -88,10 +92,23 @@ function variableForOperation(generator: CodeGenerator,
     // I have it aliased to "gql_" instead of "gql" because causes the IJ GraphQL plugin to kick
     // in and start throwing errors about duplicate fragment.
     // TODO make sure the escaping is correct...
-    `export const ${operationName} = new Query<${inType}, ${outType}>(gql_\`\n` +
+    `export const ${operationName} = new ${class_}<${inType}, ${outType}>(gql_\`\n` +
     `${sourceWithFragments}\n` +
     `\`);`,
   )
+}
+
+function getOperationBaseClass(operationType: string): string {
+  switch (operationType) {
+    case 'query':
+      return 'Query'
+    case 'mutation':
+      return 'Mutation'
+    case 'subscription':
+      return 'Subscription'
+    default:
+      throw new Error(`Invalid operation type: ${operationType}`)
+  }
 }
 
 export function typeDeclarationForGraphQLType(generator: CodeGenerator, type: GraphQLType) {
