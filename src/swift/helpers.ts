@@ -175,7 +175,7 @@ export class Helpers {
   propertiesForSelectionSet(
     selectionSet: SelectionSet,
     namespace?: string
-  ): (Field & Property)[] | undefined {
+  ): (Field & Property & Struct)[] | undefined {
     const properties = collectAndMergeFields(selectionSet, true)
       .filter(field => field.name !== '__typename')
       .map(field => this.propertyFromField(field, namespace));
@@ -230,31 +230,67 @@ export class Helpers {
 
   mapExpressionForType(
     type: GraphQLType,
-    expression: (identifier: string) => string,
-    identifier = ''
+    isConditional: boolean = false,
+    makeExpression: (expression: string) => string,
+    expression: string,
+    inputTypeName: string,
+    outputTypeName: string
   ): string {
     let isOptional;
     if (type instanceof GraphQLNonNull) {
-      isOptional = false;
+      isOptional = !!isConditional;
       type = type.ofType;
     } else {
       isOptional = true;
     }
 
     if (type instanceof GraphQLList) {
+      const elementType = type.ofType;
       if (isOptional) {
-        return `${identifier}.flatMap { $0.map { ${this.mapExpressionForType(
-          type.ofType,
-          expression,
-          '$0'
+        return `${expression}.flatMap { ${makeClosureSignature(
+          this.typeNameFromGraphQLType(type, inputTypeName, false),
+          this.typeNameFromGraphQLType(type, outputTypeName, false)
+        )} value.map { ${makeClosureSignature(
+          this.typeNameFromGraphQLType(elementType, inputTypeName),
+          this.typeNameFromGraphQLType(elementType, outputTypeName)
+        )} ${this.mapExpressionForType(
+          elementType,
+          undefined,
+          makeExpression,
+          'value',
+          inputTypeName,
+          outputTypeName
         )} } }`;
       } else {
-        return `${identifier}.map { ${this.mapExpressionForType(type.ofType, expression, '$0')} }`;
+        return `${expression}.map { ${makeClosureSignature(
+          this.typeNameFromGraphQLType(elementType, inputTypeName),
+          this.typeNameFromGraphQLType(elementType, outputTypeName)
+        )} ${this.mapExpressionForType(
+          elementType,
+          undefined,
+          makeExpression,
+          'value',
+          inputTypeName,
+          outputTypeName
+        )} }`;
       }
     } else if (isOptional) {
-      return `${identifier}.flatMap { ${expression('$0')} }`;
+      return `${expression}.flatMap { ${makeClosureSignature(
+        this.typeNameFromGraphQLType(type, inputTypeName, false),
+        this.typeNameFromGraphQLType(type, outputTypeName, false)
+      )} ${makeExpression('value')} }`;
     } else {
-      return expression(identifier);
+      return makeExpression(expression);
     }
   }
+}
+
+function makeClosureSignature(parameterTypeName: string, returnTypeName?: string) {
+  let closureSignature = `(value: ${parameterTypeName})`;
+
+  if (returnTypeName) {
+    closureSignature += ` -> ${returnTypeName}`;
+  }
+  closureSignature += ' in';
+  return closureSignature;
 }

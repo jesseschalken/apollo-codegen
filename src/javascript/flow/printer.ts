@@ -57,7 +57,10 @@ export default class Printer {
    * ```
    */
   private fixCommas(documentPart: string) {
-    const lines = documentPart.split('\n');
+    const lines = documentPart
+      .split('\n')
+      .filter(Boolean);  // filter out lines that have no content
+
     let currentLine = 0;
     let nextLine;
     const newDocumentParts = [];
@@ -78,7 +81,7 @@ export default class Printer {
         const [contents, comment] = currentLineContents.split('//');
         newDocumentParts.push({
           main: contents.replace(/\s+$/g, '') + ',',
-          comment: comment.trim()
+          comment: comment ? comment.trim() : null
         });
         currentLine++;
       } else {

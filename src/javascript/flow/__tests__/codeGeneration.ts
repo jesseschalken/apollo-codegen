@@ -5,16 +5,18 @@ const schema = loadSchema(require.resolve('../../../../test/fixtures/starwars/sc
 
 import {
   compileToIR,
-  CompilerOptions,
   CompilerContext,
 } from '../../../compiler';
 
 import { generateSource } from '../codeGeneration';
+import { FlowCompilerOptions } from '../language';
 
 function compile(
   source: string,
-  options: CompilerOptions = {
+  options: FlowCompilerOptions = {
     mergeInFieldsFromFragmentSpreads: true,
+    useFlowExactObjects: false,
+    useFlowReadOnlyTypes: false,
     addTypename: true
   }
 ): CompilerContext {
@@ -252,6 +254,64 @@ describe('Flow codeGeneration', () => {
       }
     `);
     const output = generateSource(context);
+    expect(output).toMatchSnapshot();
+  });
+
+  test('covariant properties with $ReadOnlyArray', () => {
+    const context = compile(`
+      query HeroName($episode: Episode) {
+        hero(episode: $episode) {
+          name
+          id
+          ...humanFragment
+          ...droidFragment
+        }
+      }
+
+      fragment humanFragment on Human {
+        homePlanet
+        friends {
+          ... on Human {
+            name
+          }
+
+          ... on Droid {
+            id
+          }
+        }
+      }
+
+      fragment droidFragment on Droid {
+        appearsIn
+      }
+    `, {
+      mergeInFieldsFromFragmentSpreads: true,
+      useFlowReadOnlyTypes: true,
+      useFlowExactObjects: true,
+      addTypename: true
+    });
+    const output = generateSource(context);
+    expect(output).toMatchSnapshot();
+  });
+
+  test('handles multiline graphql comments', () => {
+    const miscSchema = loadSchema(require.resolve('../../../../test/fixtures/misc/schema.json'));
+
+    const document = parse(`
+      query CustomScalar {
+        commentTest {
+          multiLine
+        }
+      }
+    `);
+
+    const output = generateSource(
+      compileToIR(miscSchema, document, {
+        mergeInFieldsFromFragmentSpreads: true,
+        addTypename: true
+      })
+    );
+
     expect(output).toMatchSnapshot();
   });
 });
